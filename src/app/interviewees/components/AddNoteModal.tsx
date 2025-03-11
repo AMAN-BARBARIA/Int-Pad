@@ -7,11 +7,12 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 
 interface AddNoteModalProps {
   intervieweeId: string;
+  tenantId: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function AddNoteModal({ intervieweeId, onClose, onSuccess }: AddNoteModalProps) {
+export default function AddNoteModal({ intervieweeId, tenantId, onClose, onSuccess }: AddNoteModalProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export default function AddNoteModal({ intervieweeId, onClose, onSuccess }: AddN
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, tenantId }),
       });
       
       if (!response.ok) {

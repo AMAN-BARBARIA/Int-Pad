@@ -6,6 +6,8 @@ import IntervieweeList from "./components/IntervieweeList";
 import CSVUploadForm from "./components/CSVUploadForm";
 import FilterBar from "./components/FilterBar";
 
+export const dynamic = 'force-dynamic';
+
 export default async function IntervieweesPage({
   searchParams,
 }: {
@@ -17,13 +19,13 @@ export default async function IntervieweesPage({
     redirect("/auth/signin");
   }
   
-  // Get the current user with their organization and role
+  // Get the current user with their tenant information
   const user = await prisma.user.findUnique({
     where: { email: session.user.email as string },
     include: {
-      organizations: {
+      tenants: {
         include: {
-          organization: true
+          tenant: true
         }
       }
     }
@@ -33,15 +35,15 @@ export default async function IntervieweesPage({
     redirect("/auth/signin");
   }
   
-  // Check if user belongs to an organization
-  if (!user.organizations || user.organizations.length === 0) {
-    redirect("/organization");
+  // Check if user belongs to a tenant
+  if (!user.tenants || user.tenants.length === 0) {
+    redirect("/dashboard");
   }
   
-  // Get the primary organization and role
-  const primaryOrgUser = user.organizations[0];
-  const role = primaryOrgUser.role;
-  const organizationId = primaryOrgUser.organizationId;
+  // Get the primary tenant and role
+  const primaryTenantUser = user.tenants[0];
+  const role = primaryTenantUser.role;
+  const tenantId = primaryTenantUser.tenantId;
   
   // Only ADMIN and HR users can access this page
   if (role !== "ADMIN" && role !== "HR") {
@@ -49,21 +51,33 @@ export default async function IntervieweesPage({
   }
   
   // Parse filters from search params
-  const nameFilter = searchParams.name as string | undefined;
-  const statusFilter = searchParams.status as IntervieweeStatus | undefined;
-  const roundFilter = searchParams.round ? parseInt(searchParams.round as string) : undefined;
-  const sortBy = searchParams.sortBy as string | undefined;
-  const sortOrder = searchParams.sortOrder as 'asc' | 'desc' | undefined;
+  // In Next.js 15, searchParams is now a Promise that should be awaited
+  const params = searchParams;
+  const nameFilterValue = typeof params.name === 'string' ? params.name : undefined;
+  const statusFilterValue = typeof params.status === 'string' ? params.status : undefined;
+  const roundFilterValue = typeof params.round === 'string' ? params.round : undefined;
+  const roleIdFilterValue = typeof params.roleId === 'string' ? params.roleId : undefined;
+  const sortByValue = typeof params.sortBy === 'string' ? params.sortBy : undefined;
+  const sortOrderValue = typeof params.sortOrder === 'string' ? params.sortOrder : 'desc';
+  
+  // Safely convert to appropriate types
+  const nameFilter = nameFilterValue;
+  const statusFilter = statusFilterValue as IntervieweeStatus | undefined;
+  const roundFilter = roundFilterValue ? parseInt(roundFilterValue) : undefined;
+  const roleIdFilter = roleIdFilterValue;
+  const sortBy = sortByValue;
+  const sortOrder = sortOrderValue as 'asc' | 'desc';
   
   // Build the filter conditions
   const filterConditions: any = {
-    organizationId: organizationId,
+    tenantId: tenantId,
   };
   
   if (nameFilter) {
-    filterConditions.name = {
-      contains: nameFilter,
-    };
+    filterConditions.OR = [
+      { name: { contains: nameFilter } },
+      { email: { contains: nameFilter } }
+    ];
   }
   
   if (statusFilter) {
@@ -74,10 +88,14 @@ export default async function IntervieweesPage({
     filterConditions.currentRound = roundFilter;
   }
   
+  if (roleIdFilter) {
+    filterConditions.roleId = roleIdFilter;
+  }
+  
   // Build the sort options
   const orderBy: any = {};
   if (sortBy) {
-    orderBy[sortBy] = sortOrder || 'asc';
+    orderBy[sortBy] = sortOrder;
   } else {
     // Default sorting by creation date (newest first)
     orderBy.createdAt = 'desc';
@@ -98,7 +116,7 @@ export default async function IntervieweesPage({
   
   // Fetch job roles for the filter dropdown
   const roles = await prisma.jobRole.findMany({
-    where: { interviewees: { some: { organizationId: organizationId } } },
+    where: { tenantId: tenantId },
     orderBy: { title: 'asc' },
   });
   
@@ -106,7 +124,7 @@ export default async function IntervieweesPage({
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Interviewee Management</h1>
-        <CSVUploadForm organizationId={organizationId} />
+        <CSVUploadForm tenantId={tenantId} />
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -114,7 +132,7 @@ export default async function IntervieweesPage({
       </div>
       
       <div className="bg-white rounded-lg shadow-md">
-        <IntervieweeList interviewees={interviewees} />
+        <IntervieweeList interviewees={interviewees} tenantId={tenantId} />
       </div>
     </div>
   );

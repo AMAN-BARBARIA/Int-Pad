@@ -4,6 +4,13 @@ import { addDays, startOfDay, endOfDay, addMinutes, parseISO, isBefore, isAfter 
 
 const prisma = new PrismaClient();
 
+// Enum for BookingStatus since the import wasn't working
+enum BookingStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED'
+}
+
 interface ExceptionDate {
   id: string;
   date: Date;
@@ -29,6 +36,9 @@ export async function GET(
   context: { params: { userId: string } }
 ) {
   try {
+    // No need to check for authentication for public booking pages
+    // The tenantId parameter is still required
+    
     // Access userId from context.params to avoid the Next.js warning
     const userId = context.params.userId;
     
@@ -40,7 +50,15 @@ export async function GET(
     }
     
     const searchParams = request.nextUrl.searchParams;
+    const tenantId = searchParams.get("tenantId");
     
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: "Missing tenantId parameter" },
+        { status: 400 }
+      );
+    }
+
     // Get start and end dates from query params, or default to next 14 days
     let startDate = searchParams.get("startDate") 
       ? parseISO(searchParams.get("startDate") as string)
@@ -54,14 +72,19 @@ export async function GET(
     startDate = startOfDay(startDate);
     endDate = endOfDay(endDate);
     
-    // Get the interviewer's settings, availability, and exception dates
+    // Get the interviewer with their tenant-specific settings and availabilities
     const interviewer = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        interviewSettings: true,
-        availabilities: true,
+        userSettings: {
+          where: { tenantId }
+        },
+        availabilities: {
+          where: { tenantId }
+        },
         exceptionDates: {
           where: {
+            tenantId,
             date: {
               gte: startDate,
               lte: endDate,
@@ -78,16 +101,20 @@ export async function GET(
       );
     }
     
+    // Get interviewer's userSettings for this tenant
+    const userSettings = interviewer.userSettings?.[0];
+    
     // Get existing bookings for this interviewer in the date range
     const existingBookings = await prisma.booking.findMany({
       where: {
+        tenantId,
         interviewerId: userId,
         startTime: {
           gte: startDate,
           lte: endDate,
         },
         status: {
-          in: ["pending", "confirmed"]
+          in: [BookingStatus.PENDING, BookingStatus.CONFIRMED]
         }
       },
       select: {
@@ -98,10 +125,10 @@ export async function GET(
     });
     
     // Get interviewer settings with defaults if not set
-    const meetingDuration = interviewer.interviewSettings?.meetingDuration || 30; // default to 30 minutes
-    const maxSchedulesPerDay = interviewer.interviewSettings?.maxSchedulesPerDay || 10; // default to 10 per day
-    const bufferBetweenEvents = interviewer.interviewSettings?.bufferBetweenEvents || 15; // default to 15 minutes
-    const advanceBookingDays = interviewer.interviewSettings?.advanceBookingDays || 30; // default to 30 days
+    const meetingDuration = userSettings?.meetingDuration || 30; // default to 30 minutes
+    const maxSchedulesPerDay = userSettings?.maxSchedulesPerDay || 10; // default to 10 per day
+    const bufferBetweenEvents = userSettings?.bufferBetweenEvents || 15; // default to 15 minutes
+    const advanceBookingDays = userSettings?.advanceBookingDays || 30; // default to 30 days
     
     // Limit the end date based on advance booking days setting
     const maxEndDate = addDays(new Date(), advanceBookingDays);
@@ -111,12 +138,14 @@ export async function GET(
     
     // Create a map of exception dates for quick lookup
     const exceptionDatesMap = new Map();
-    interviewer.exceptionDates.forEach((exception: ExceptionDate) => {
-      if (exception.isBlocked) {
-        const dateStr = exception.date.toISOString().split("T")[0];
-        exceptionDatesMap.set(dateStr, true);
-      }
-    });
+    if (interviewer.exceptionDates) {
+      interviewer.exceptionDates.forEach((exception: ExceptionDate) => {
+        if (exception.isBlocked) {
+          const dateStr = exception.date.toISOString().split("T")[0];
+          exceptionDatesMap.set(dateStr, true);
+        }
+      });
+    }
     
     // Create a map of bookings by date for quick lookup and count bookings per day
     const bookingsByDate = new Map();
@@ -160,7 +189,7 @@ export async function GET(
       }
       
       // Find availability for this day of the week
-      const dayAvailability = interviewer.availabilities.find(
+      const dayAvailability = interviewer.availabilities?.find(
         (a: Availability) => a.dayOfWeek === dayOfWeek
       );
       
@@ -227,7 +256,7 @@ export async function GET(
         id: interviewer.id,
         name: interviewer.name,
         email: interviewer.email,
-        meetingDuration: interviewer.interviewSettings?.meetingDuration || 30,
+        meetingDuration: userSettings?.meetingDuration || 30,
       },
       availableSlots,
     });

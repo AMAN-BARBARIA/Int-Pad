@@ -8,7 +8,7 @@ interface TeamMembersListProps {
 }
 
 export default function TeamMembersList({ members }: TeamMembersListProps) {
-  const getRoleBadgeColor = (role: UserRole) => {
+  const getRoleBadgeColor = (role: UserRole | string) => {
     switch (role) {
       case UserRole.ADMIN:
         return 'bg-purple-100 text-purple-800';

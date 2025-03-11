@@ -1,4 +1,53 @@
-import { Interviewee, IntervieweeNote, IntervieweeStatus, JobRole } from "@prisma/client";
+import { IntervieweeStatus } from "./prisma";
+
+export interface Interviewee {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  resumeLink: string | null;
+  currentCompany: string | null;
+  yearsOfExperience: number | null;
+  skills: string | null;
+  currentCTC: string | null;
+  expectedCTC: string | null;
+  noticePeriod: string | null;
+  currentLocation: string | null;
+  status: IntervieweeStatus | string;
+  currentRound: number;
+  roleId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JobRole {
+  id: string;
+  tenantId: string;
+  title: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface User {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+}
+
+export interface IntervieweeNote {
+  id: string;
+  content: string;
+  intervieweeId: string;
+  userId: string;
+  tenantId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
+}
 
 export type IntervieweeWithDetails = Interviewee & {
   role: JobRole | null;
@@ -18,6 +67,7 @@ export type IntervieweeFormData = {
   noticePeriod?: string;
   currentLocation?: string;
   roleId?: string;
+  tenantId: string;
 };
 
 export type IntervieweeCSVRow = {
@@ -39,4 +89,5 @@ export type IntervieweeCSVRow = {
 export type IntervieweeNoteFormData = {
   content: string;
   intervieweeId: string;
+  tenantId: string;
 }; 

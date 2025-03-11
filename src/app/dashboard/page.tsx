@@ -3,7 +3,8 @@
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { CalendarIcon, UserGroupIcon, LinkIcon, VideoCameraIcon } from "@heroicons/react/24/outline";
+import { CalendarIcon, UserGroupIcon, VideoCameraIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ClipboardIcon } from "@heroicons/react/24/outline";
 
 interface Booking {
   id: string;
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [shareableLink, setShareableLink] = useState<string>("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string>("");
 
   // Fetch user data when the component mounts
   useEffect(() => {
@@ -44,7 +46,17 @@ export default function Dashboard() {
         
         // Set the shareable link
         if (session?.user?.id) {
-          setShareableLink(`${window.location.origin}/book/${session.user.id}`);
+          // Add the tenantId as a query parameter to the shareable link
+          const tenantId = session.user.tenantId;
+          console.log("Session user tenant ID:", tenantId); // Debug log
+          if (tenantId) {
+            setShareableLink(`${window.location.origin}/book/${session.user.id}?tenantId=${tenantId}`);
+          } else {
+            console.error('No tenant ID found in session');
+            setShareableLink(`${window.location.origin}/book/${session.user.id}`);
+            // Set a warning message if there's no tenant ID
+            setSettingsMessage("Warning: Your booking link may not work correctly because tenant information is missing.");
+          }
         }
         
         // Fetch bookings
@@ -65,7 +77,7 @@ export default function Dashboard() {
     }
   }, [session?.user?.id]);
 
-  const copyToClipboard = () => {
+  const copyLinkToClipboard = () => {
     navigator.clipboard.writeText(shareableLink);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
@@ -132,15 +144,28 @@ export default function Dashboard() {
                     Share your unique booking link with candidates so they can schedule interviews.
                   </p>
                   {isAvailabilitySet ? (
-                    <div className="mt-2 flex items-center">
-                      <span className="text-sm text-gray-500 mr-2 truncate max-w-xs">{shareableLink}</span>
-                      <button 
-                        onClick={copyToClipboard}
-                        className="text-indigo-600 hover:text-indigo-500 flex items-center"
-                      >
-                        <LinkIcon className="h-4 w-4 mr-1" />
-                        {linkCopied ? "Copied!" : "Copy"}
-                      </button>
+                    <div className="mt-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={shareableLink}
+                          className="flex-1 p-2 border rounded-md text-sm bg-gray-50"
+                        />
+                        <button
+                          onClick={copyLinkToClipboard}
+                          className="p-2 text-indigo-600 hover:text-indigo-800 transition-colors"
+                        >
+                          {linkCopied ? (
+                            <CheckIcon className="h-5 w-5" />
+                          ) : (
+                            <ClipboardIcon className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                      {settingsMessage && (
+                        <p className="mt-2 text-sm text-yellow-600">{settingsMessage}</p>
+                      )}
                     </div>
                   ) : (
                     <p className="mt-2 text-sm text-gray-500">

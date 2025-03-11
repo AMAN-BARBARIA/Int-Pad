@@ -54,7 +54,20 @@ export default function BookingPage() {
         setIsLoading(true);
         setErrorMessage(null);
         
-        const response = await fetch(`/api/available-slots/${userId}`);
+        // Get tenantId from the URL query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const tenantId = urlParams.get('tenantId');
+        
+        if (!tenantId) {
+          console.error("Missing tenantId parameter in URL");
+          setErrorMessage(
+            "This booking link is incomplete. Please contact the interviewer for a valid booking link that includes tenant information."
+          );
+          setIsLoading(false);
+          return;
+        }
+        
+        const response = await fetch(`/api/available-slots/${userId}?tenantId=${tenantId}`);
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -139,6 +152,14 @@ export default function BookingPage() {
         throw new Error("Selected time slot not found");
       }
       
+      // Get tenantId from URL query parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenantId = urlParams.get('tenantId');
+      
+      if (!tenantId) {
+        throw new Error("Missing tenantId parameter. Please use a valid booking link.");
+      }
+      
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
@@ -151,6 +172,7 @@ export default function BookingPage() {
           intervieweeName: formData.name,
           intervieweeEmail: formData.email,
           title: `Interview with ${formData.name}`,
+          tenantId: tenantId
         }),
       });
       

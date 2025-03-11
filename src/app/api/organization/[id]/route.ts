@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 
-// Update an organization
+// Update a tenant (organization)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -17,12 +17,9 @@ export async function PATCH(
       );
     }
     
-    // Get the current user with their organizations
+    // Get the current user
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: {
-        organizations: true
-      }
+      where: { email: session.user.email }
     });
     
     if (!user) {
@@ -32,22 +29,29 @@ export async function PATCH(
       );
     }
     
-    // Check if the organization exists
-    const organization = await prisma.organization.findUnique({
+    // Check if the tenant (organization) exists
+    const tenant = await prisma.tenant.findUnique({
       where: { id: params.id },
     });
     
-    if (!organization) {
+    if (!tenant) {
       return NextResponse.json(
         { message: 'Organization not found' },
         { status: 404 }
       );
     }
     
-    // Check if the user belongs to this organization
-    const orgUser = user.organizations.find(ou => ou.organizationId === organization.id);
+    // Check if the user belongs to this tenant
+    const tenantUser = await prisma.tenantUser.findUnique({
+      where: {
+        userId_tenantId: {
+          userId: user.id,
+          tenantId: tenant.id
+        }
+      }
+    });
     
-    if (!orgUser) {
+    if (!tenantUser) {
       return NextResponse.json(
         { message: 'You do not have permission to update this organization' },
         { status: 403 }
@@ -55,7 +59,7 @@ export async function PATCH(
     }
     
     // Check if the user is an admin
-    if (orgUser.role !== 'ADMIN') {
+    if (tenantUser.role !== 'ADMIN') {
       return NextResponse.json(
         { message: 'Only admins can update the organization' },
         { status: 403 }
@@ -72,16 +76,26 @@ export async function PATCH(
       );
     }
     
-    // Update the organization
-    const updatedOrganization = await prisma.organization.update({
+    // Update the tenant (organization)
+    const updatedTenant = await prisma.tenant.update({
       where: { id: params.id },
       data: {
         name: data.name,
-        description: data.description,
+        domain: data.description, // Using domain field for description
       },
     });
     
-    return NextResponse.json(updatedOrganization);
+    // Format the response to match Organization interface
+    const response = {
+      id: updatedTenant.id,
+      name: updatedTenant.name,
+      description: updatedTenant.domain,
+      active: updatedTenant.active,
+      createdAt: updatedTenant.createdAt,
+      updatedAt: updatedTenant.updatedAt
+    };
+    
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error updating organization:', error);
     return NextResponse.json(

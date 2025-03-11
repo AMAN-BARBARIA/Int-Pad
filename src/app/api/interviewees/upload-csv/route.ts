@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { IntervieweeStatus } from '@/types/prisma';
 import { IntervieweeCSVRow } from '@/types/interviewee';
 import { prisma } from '@/lib/prisma';
+import { IntervieweeStatus } from '@/types/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,15 +15,13 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Get the current user with their organizations and roles
+    // Get the current user with their tenant information
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { 
+        email: session.user.email 
+      },
       include: {
-        organizations: {
-          include: {
-            organization: true
-          }
-        }
+        tenants: true
       }
     });
     
@@ -34,18 +32,18 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check if user belongs to an organization
-    if (!user.organizations || user.organizations.length === 0) {
+    // Check if user belongs to a tenant
+    if (!user.tenants || user.tenants.length === 0) {
       return NextResponse.json(
-        { message: 'User does not belong to any organization' },
+        { message: 'User does not belong to any tenant' },
         { status: 400 }
       );
     }
     
-    // Get the primary organization and role
-    const primaryOrgUser = user.organizations[0];
-    const role = primaryOrgUser.role;
-    const organizationId = primaryOrgUser.organizationId;
+    // Get the primary tenant and role
+    const primaryTenantUser = user.tenants[0];
+    const role = primaryTenantUser.role;
+    const tenantId = primaryTenantUser.tenantId;
     
     // Check if user has permission (ADMIN or HR)
     if (role !== "ADMIN" && role !== "HR") {
@@ -90,12 +88,13 @@ export async function POST(request: NextRequest) {
           continue;
         }
         
-        // Check if a role with this title exists, create if not
+        // Check if a role with this title exists in this tenant, create if not
         let roleId = null;
         if (row.Role) {
           const existingRole = await prisma.jobRole.findFirst({
             where: {
               title: row.Role,
+              tenantId: tenantId
             },
           });
           
@@ -105,21 +104,24 @@ export async function POST(request: NextRequest) {
             const newRole = await prisma.jobRole.create({
               data: {
                 title: row.Role,
+                tenantId: tenantId,
+                isActive: true
               },
             });
             roleId = newRole.id;
           }
         }
         
-        // Check if interviewee with this email already exists
-        const existingInterviewee = await prisma.interviewee.findUnique({
+        // Check if interviewee with this email already exists in this tenant
+        const existingInterviewee = await prisma.interviewee.findFirst({
           where: {
             email: row['Email ID'],
+            tenantId: tenantId
           },
         });
         
         if (existingInterviewee) {
-          errors.push(`Skipped row: Interviewee with email ${row['Email ID']} already exists`);
+          errors.push(`Skipped row: Interviewee with email ${row['Email ID']} already exists in this tenant`);
           continue;
         }
         
@@ -140,7 +142,7 @@ export async function POST(request: NextRequest) {
             status: IntervieweeStatus.NEW,
             currentRound: 0,
             roleId: roleId,
-            organizationId: organizationId,
+            tenantId: tenantId,
           },
         });
         

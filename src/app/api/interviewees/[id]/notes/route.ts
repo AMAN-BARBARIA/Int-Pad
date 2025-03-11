@@ -20,9 +20,9 @@ export async function POST(
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
-        organizations: {
+        tenants: {
           include: {
-            organization: true
+            tenant: true
           }
         }
       }
@@ -35,18 +35,18 @@ export async function POST(
       );
     }
     
-    // Check if user belongs to an organization
-    if (!user.organizations || user.organizations.length === 0) {
+    // Check if user belongs to a tenant
+    if (!user.tenants || user.tenants.length === 0) {
       return NextResponse.json(
-        { message: 'User does not belong to any organization' },
+        { message: 'User does not belong to any tenant' },
         { status: 400 }
       );
     }
     
-    // Get the primary organization and role
-    const primaryOrgUser = user.organizations[0];
-    const role = primaryOrgUser.role;
-    const organizationId = primaryOrgUser.organizationId;
+    // Get the primary tenant and role
+    const primaryTenantUser = user.tenants[0];
+    const role = primaryTenantUser.role;
+    const tenantId = primaryTenantUser.tenantId;
     
     // Only ADMIN and HR users can add notes
     if (role !== "ADMIN" && role !== "HR") {
@@ -59,17 +59,17 @@ export async function POST(
     // Get the interviewee ID from the URL params
     const intervieweeId = params.id;
     
-    // Check if the interviewee exists and belongs to the user's organization
+    // Check if the interviewee exists and belongs to the user's tenant
     const interviewee = await prisma.interviewee.findUnique({
       where: {
         id: intervieweeId,
-        organizationId: organizationId,
+        tenantId: tenantId,
       },
     });
     
     if (!interviewee) {
       return NextResponse.json(
-        { message: 'Interviewee not found' },
+        { message: 'Interviewee not found in your tenant' },
         { status: 404 }
       );
     }
@@ -90,6 +90,7 @@ export async function POST(
         content: content,
         intervieweeId,
         userId: user.id,
+        tenantId: tenantId
       },
     });
     

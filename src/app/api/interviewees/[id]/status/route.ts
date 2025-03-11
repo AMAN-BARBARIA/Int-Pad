@@ -24,9 +24,9 @@ export async function PATCH(
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
-        organizations: {
+        tenants: {
           include: {
-            organization: true
+            tenant: true
           }
         }
       }
@@ -40,18 +40,18 @@ export async function PATCH(
       );
     }
     
-    // Check if user belongs to an organization
-    if (!user.organizations || user.organizations.length === 0) {
+    // Check if user belongs to a tenant
+    if (!user.tenants || user.tenants.length === 0) {
       return NextResponse.json(
-        { message: 'User does not belong to any organization' },
+        { message: 'User does not belong to any tenant' },
         { status: 400 }
       );
     }
     
-    // Get the primary organization and role
-    const primaryOrgUser = user.organizations[0];
-    const role = primaryOrgUser.role;
-    const organizationId = primaryOrgUser.organizationId;
+    // Get the primary tenant and role
+    const primaryTenantUser = user.tenants[0];
+    const role = primaryTenantUser.role;
+    const tenantId = primaryTenantUser.tenantId;
     
     // Check if the user has permission to update interviewee status
     if (role !== 'ADMIN' && role !== 'HR' && role !== 'INTERVIEWER') {
@@ -64,29 +64,31 @@ export async function PATCH(
     // Get the interviewee ID from the URL params
     const intervieweeId = params.id;
     
-    // Check if the interviewee exists and belongs to the user's organization
+    // Check if the interviewee exists and belongs to the user's tenant
     const interviewee = await prisma.interviewee.findUnique({
       where: {
         id: intervieweeId,
-        organizationId: organizationId,
+        tenantId: tenantId,
       },
     });
     
     if (!interviewee) {
       return NextResponse.json(
-        { message: 'Interviewee not found' },
+        { message: 'Interviewee not found in your tenant' },
         { status: 404 }
       );
     }
     
     // Parse the request body to get the status
     const body = await request.json();
-    const { status, note, roundResult } = body;
+    const { note, roundResult } = body;
+    let { status } = body;
     
     // Validate the status
-    if (!status || !Object.values(IntervieweeStatus).includes(status as IntervieweeStatus)) {
+    const validStatuses = Object.values(IntervieweeStatus);
+    if (!status || !validStatuses.includes(status as IntervieweeStatus)) {
       return NextResponse.json(
-        { message: 'Invalid status' },
+        { message: `Invalid status. Valid statuses are: ${validStatuses.join(', ')}` },
         { status: 400 }
       );
     }
@@ -96,12 +98,19 @@ export async function PATCH(
     let currentRound = interviewee.currentRound || 0;
     
     // Update round based on status changes and round results
-    if (status === 'IN_PROGRESS' && (previousStatus === 'SCHEDULED' || previousStatus === 'CONTACTED')) {
+    if (status === IntervieweeStatus.IN_PROGRESS && 
+        (previousStatus === IntervieweeStatus.SCHEDULED || previousStatus === IntervieweeStatus.CONTACTED) && 
+        currentRound === 0) {
       // Set to round 1 when transitioning to IN_PROGRESS from SCHEDULED or CONTACTED
       currentRound = 1;
     } else if (roundResult === 'PASS') {
       // Increment round when passing
       currentRound += 1;
+      
+      // If they've completed round 3 and passed, mark as COMPLETED
+      if (currentRound > 3 && status === IntervieweeStatus.IN_PROGRESS) {
+        status = IntervieweeStatus.COMPLETED;
+      }
     }
     
     // Update the interviewee status and round
@@ -123,10 +132,17 @@ export async function PATCH(
       noteContent = note;
     } else if (roundResult) {
       // Create a note about the round result
-      noteContent = `[SYSTEM] Round ${interviewee.currentRound} ${roundResult}.`;
-    } else if (status === 'SCHEDULED' && previousStatus !== 'SCHEDULED' && currentRound === 1) {
+      if (roundResult === 'PASS' && status === IntervieweeStatus.COMPLETED) {
+        noteContent = `[SYSTEM] Candidate passed final round and marked as completed.`;
+      } else {
+        noteContent = `[SYSTEM] Round ${interviewee.currentRound} ${roundResult}.`;
+      }
+    } else if (status === IntervieweeStatus.SCHEDULED && previousStatus !== IntervieweeStatus.SCHEDULED) {
+      // Create a note about scheduling
+      noteContent = `[SYSTEM] Candidate marked as scheduled.`;
+    } else if (status === IntervieweeStatus.IN_PROGRESS && previousStatus !== IntervieweeStatus.IN_PROGRESS && currentRound === 1) {
       // Create a note about starting the interview process
-      noteContent = `[SYSTEM] First interview scheduled. Starting round 1.`;
+      noteContent = `[SYSTEM] Starting interview process. Round 1 in progress.`;
     } else {
       // Create a note about the status change
       noteContent = `[SYSTEM] Status changed from ${previousStatus} to ${status}`;
@@ -137,7 +153,8 @@ export async function PATCH(
       data: {
         content: noteContent,
         intervieweeId,
-        userId: user.id
+        userId: user.id,
+        tenantId: tenantId
       }
     });
     

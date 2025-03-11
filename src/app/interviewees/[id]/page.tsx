@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import IntervieweeDetailsClient from "./IntervieweeDetailsClient";
 
+export const dynamic = 'force-dynamic';
+
 export default async function IntervieweeDetailsPage({
   params,
 }: {
@@ -14,13 +16,13 @@ export default async function IntervieweeDetailsPage({
     redirect("/auth/signin");
   }
   
-  // Get the current user with their organization and role
+  // Get the current user with their tenant information
   const user = await prisma.user.findUnique({
     where: { email: session.user.email as string },
     include: {
-      organizations: {
+      tenants: {
         include: {
-          organization: true
+          tenant: true
         }
       }
     }
@@ -30,26 +32,30 @@ export default async function IntervieweeDetailsPage({
     redirect("/auth/signin");
   }
   
-  // Check if user belongs to an organization
-  if (!user.organizations || user.organizations.length === 0) {
-    redirect("/organization");
+  // Check if user belongs to a tenant
+  if (!user.tenants || user.tenants.length === 0) {
+    redirect("/dashboard");
   }
   
-  // Get the primary organization and role
-  const primaryOrgUser = user.organizations[0];
-  const role = primaryOrgUser.role;
-  const organizationId = primaryOrgUser.organizationId;
+  // Get the primary tenant and role
+  const primaryTenantUser = user.tenants[0];
+  const role = primaryTenantUser.role;
+  const tenantId = primaryTenantUser.tenantId;
   
   // Only ADMIN, HR, and INTERVIEWER users can access this page
   if (role !== "ADMIN" && role !== "HR" && role !== "INTERVIEWER") {
     redirect("/dashboard");
   }
   
+  // Get the ID from params 
+  // In Next.js 15, params is now a Promise-like object that can be destructured directly
+  const { id: intervieweeId } = params;
+  
   // Fetch the interviewee with all related data
   const interviewee = await prisma.interviewee.findUnique({
     where: { 
-      id: params.id,
-      organizationId: organizationId
+      id: intervieweeId,
+      tenantId: tenantId
     },
     include: {
       role: true,

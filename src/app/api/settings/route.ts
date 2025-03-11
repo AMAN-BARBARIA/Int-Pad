@@ -6,7 +6,7 @@ import { authOptions } from "../auth/[...nextauth]/route";
 const prisma = new PrismaClient();
 
 // GET /api/settings - Get the current user's interview settings
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -18,11 +18,23 @@ export async function GET() {
     }
     
     const userId = session.user.id;
+    const searchParams = request.nextUrl.searchParams;
+    const tenantId = searchParams.get("tenantId");
     
-    // Get the user's interview settings
-    const settings = await prisma.interviewSettings.findUnique({
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: "Missing tenantId parameter" },
+        { status: 400 }
+      );
+    }
+    
+    // Get the user's settings for this tenant
+    const settings = await prisma.userSettings.findUnique({
       where: {
-        userId: userId,
+        userId_tenantId: {
+          userId: userId,
+          tenantId: tenantId,
+        },
       },
     });
     
@@ -66,6 +78,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     const {
+      tenantId,
       maxSchedulesPerDay,
       advanceBookingDays,
       meetingDuration,
@@ -78,6 +91,7 @@ export async function POST(request: NextRequest) {
     
     // Validate required fields
     if (
+      !tenantId ||
       maxSchedulesPerDay === undefined ||
       advanceBookingDays === undefined ||
       meetingDuration === undefined ||
@@ -90,9 +104,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Create or update the settings
-    const settings = await prisma.interviewSettings.upsert({
+    const settings = await prisma.userSettings.upsert({
       where: {
-        userId: userId,
+        userId_tenantId: {
+          userId: userId,
+          tenantId: tenantId,
+        },
       },
       update: {
         maxSchedulesPerDay,
@@ -106,6 +123,7 @@ export async function POST(request: NextRequest) {
       },
       create: {
         userId,
+        tenantId,
         maxSchedulesPerDay,
         advanceBookingDays,
         meetingDuration,

@@ -4,10 +4,10 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface CSVUploadFormProps {
-  organizationId: string;
+  tenantId: string;
 }
 
-export default function CSVUploadForm({ organizationId }: CSVUploadFormProps) {
+export default function CSVUploadForm({ tenantId }: CSVUploadFormProps) {
   const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export default function CSVUploadForm({ organizationId }: CSVUploadFormProps) {
     
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('organizationId', organizationId);
+    formData.append('tenantId', tenantId);
     
     try {
       const response = await fetch('/api/interviewees/upload-csv', {

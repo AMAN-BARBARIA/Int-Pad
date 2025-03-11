@@ -28,10 +28,27 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
+    // Get user with tenant information
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: {
+        tenants: true
+      }
+    });
+    
+    if (!user || !user.tenants || user.tenants.length === 0) {
+      return NextResponse.json({ error: "User not associated with any tenant" }, { status: 400 });
+    }
+    
+    // Get the primary tenant
+    const primaryTenantUser = user.tenants[0];
+    const tenantId = primaryTenantUser.tenantId;
+    
     // Fetch the user's availability slots
     const availabilitySlots = await prisma.availability.findMany({
       where: {
         userId: session.user.id,
+        tenantId: tenantId
       },
       orderBy: {
         dayOfWeek: 'asc',
@@ -42,6 +59,7 @@ export async function GET() {
     const exceptionDates = await prisma.exceptionDate.findMany({
       where: {
         userId: session.user.id,
+        tenantId: tenantId
       },
       orderBy: {
         date: 'asc',
@@ -65,6 +83,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
+    // Get user with tenant information
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: {
+        tenants: true
+      }
+    });
+    
+    if (!user || !user.tenants || user.tenants.length === 0) {
+      return NextResponse.json({ error: "User not associated with any tenant" }, { status: 400 });
+    }
+    
+    // Get the primary tenant
+    const primaryTenantUser = user.tenants[0];
+    const tenantId = primaryTenantUser.tenantId;
+    
     // Get the availability data from the request body
     const { availabilitySlots, exceptionDates } = await req.json() as {
       availabilitySlots: AvailabilitySlot[];
@@ -77,6 +111,7 @@ export async function POST(req: NextRequest) {
       await tx.availability.deleteMany({
         where: {
           userId: session.user.id,
+          tenantId: tenantId
         },
       });
       
@@ -86,6 +121,7 @@ export async function POST(req: NextRequest) {
           tx.availability.create({
             data: {
               userId: session.user.id,
+              tenantId: tenantId,
               dayOfWeek: slot.dayOfWeek,
               startTime: slot.startTime,
               endTime: slot.endTime,
@@ -98,6 +134,7 @@ export async function POST(req: NextRequest) {
       await tx.exceptionDate.deleteMany({
         where: {
           userId: session.user.id,
+          tenantId: tenantId
         },
       });
       
@@ -107,6 +144,7 @@ export async function POST(req: NextRequest) {
           tx.exceptionDate.create({
             data: {
               userId: session.user.id,
+              tenantId: tenantId,
               date: new Date(date.date),
               isBlocked: date.isBlocked,
             },

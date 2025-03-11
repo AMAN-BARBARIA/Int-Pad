@@ -11,66 +11,61 @@ export default async function OrganizationPage() {
     redirect("/api/auth/signin");
   }
   
-  // Get the current user with their organizations
+  // Get the current user
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
-    include: {
-      organizations: {
-        include: {
-          organization: true
-        }
-      }
-    }
   });
   
   if (!user) {
     redirect("/api/auth/signin");
   }
   
-  // Check if user belongs to any organization
-  const hasOrganization = user.organizations.length > 0;
+  // Get user's tenant associations
+  const tenantUsers = await prisma.tenantUser.findMany({
+    where: { userId: user.id },
+    include: {
+      tenant: true
+    }
+  });
   
-  // If user has an organization, get the primary one and its members
+  // Check if user belongs to any tenant
+  const hasOrganization = tenantUsers.length > 0;
+  
+  // If user has a tenant, get the primary one and its members
   let organization = null;
   let members = [];
   
   if (hasOrganization) {
-    const primaryOrgUser = user.organizations[0];
-    const organizationId = primaryOrgUser.organizationId;
+    const primaryTenantUser = tenantUsers[0];
+    const tenantId = primaryTenantUser.tenantId;
     
-    // Get the organization with all members
-    const orgData = await prisma.organization.findUnique({
-      where: { id: organizationId },
+    // Get all users for this tenant
+    const tenantAllUsers = await prisma.tenantUser.findMany({
+      where: { tenantId },
       include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true
-              }
-            }
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
           }
         }
       }
     });
     
-    if (orgData) {
-      organization = {
-        id: orgData.id,
-        name: orgData.name,
-        description: orgData.description
-      };
-      
-      members = orgData.members;
-    }
+    organization = {
+      id: primaryTenantUser.tenant.id,
+      name: primaryTenantUser.tenant.name,
+      description: primaryTenantUser.tenant.domain || ""
+    };
+    
+    members = tenantAllUsers;
   }
   
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Organization</h1>
+      <h1 className="text-3xl font-bold mb-8">Tenant</h1>
       
       {!hasOrganization ? (
         <CreateOrganizationForm />

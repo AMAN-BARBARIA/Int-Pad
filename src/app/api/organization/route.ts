@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { UserRole } from '@/types/prisma';
 import { prisma } from '@/lib/prisma';
 
-// Create a new organization
+// Create a new organization (tenant)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
@@ -37,24 +36,43 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Create the organization
-    const organization = await prisma.organization.create({
-      data: {
-        name: data.name,
-        description: data.description,
-      }
+    // Create new organization using Tenant model
+    const tenant = await prisma.$transaction(async (tx) => {
+      // 1. Create the tenant
+      const newTenant = await tx.tenant.create({
+        data: {
+          name: data.name,
+          domain: data.description, // Using domain for description
+          active: true
+        }
+      });
+      
+      // 2. Create the tenant user relationship with ADMIN role
+      await tx.tenantUser.create({
+        data: {
+          userId: user.id,
+          tenantId: newTenant.id,
+          role: "ADMIN",
+          isActive: true
+        }
+      });
+      
+      // 3. Create default user settings
+      await tx.userSettings.create({
+        data: {
+          userId: user.id,
+          tenantId: newTenant.id,
+          maxSchedulesPerDay: 3,
+          advanceBookingDays: 30,
+          meetingDuration: 30,
+          bufferBetweenEvents: 15
+        }
+      });
+      
+      return newTenant;
     });
     
-    // Create the organization user relationship with ADMIN role
-    await prisma.organizationUser.create({
-      data: {
-        userId: user.id,
-        organizationId: organization.id,
-        role: "ADMIN"
-      }
-    });
-    
-    return NextResponse.json(organization, { status: 201 });
+    return NextResponse.json(tenant, { status: 201 });
   } catch (error) {
     console.error('Error creating organization:', error);
     return NextResponse.json(
@@ -64,7 +82,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get organization details
+// Get organization details (using tenant data)
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession();
@@ -76,16 +94,9 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Get the current user with their organizations
+    // Get the current user
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: {
-        organizations: {
-          include: {
-            organization: true
-          }
-        }
-      }
     });
     
     if (!user) {
@@ -95,36 +106,48 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    // Get user's tenant associations
+    const tenantUsers = await prisma.tenantUser.findMany({
+      where: { userId: user.id },
+      include: {
+        tenant: true
+      }
+    });
+    
     // Check if user belongs to any organization
-    if (user.organizations.length === 0) {
+    if (tenantUsers.length === 0) {
       return NextResponse.json(
         { message: 'User does not belong to any organization' },
         { status: 404 }
       );
     }
     
-    // Get the primary organization
-    const primaryOrgUser = user.organizations[0];
-    const organizationId = primaryOrgUser.organizationId;
+    // Get the primary tenant
+    const primaryTenantUser = tenantUsers[0];
+    const tenantId = primaryTenantUser.tenantId;
     
-    // Get the organization with all members
-    const organization = await prisma.organization.findUnique({
-      where: { id: organizationId },
+    // Get all users for this tenant
+    const members = await prisma.tenantUser.findMany({
+      where: { tenantId },
       include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true
-              }
-            }
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
           }
         }
       }
     });
+    
+    // Format response to match expected organization interface
+    const organization = {
+      id: primaryTenantUser.tenant.id,
+      name: primaryTenantUser.tenant.name,
+      description: primaryTenantUser.tenant.domain || "",
+      members: members
+    };
     
     return NextResponse.json(organization);
   } catch (error) {

@@ -8,12 +8,12 @@ declare module "next-auth" {
     user: {
       /** The user's unique identifier */
       id: string;
-      /** The user's organization ID */
-      organizationId?: string;
-      /** The user's role in the organization */
+      /** The user's tenant ID */
+      tenantId?: string;
+      /** The user's role in the tenant */
       role?: string;
-      /** The user's organization name */
-      organizationName?: string;
+      /** The user's tenant name */
+      tenantName?: string;
     } & DefaultSession["user"];
   }
 }

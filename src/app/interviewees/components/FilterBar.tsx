@@ -89,9 +89,8 @@ export default function FilterBar({ roles }: FilterBarProps) {
             <option value={IntervieweeStatus.CONTACTED}>Contacted</option>
             <option value={IntervieweeStatus.SCHEDULED}>Scheduled</option>
             <option value={IntervieweeStatus.IN_PROGRESS}>In Progress</option>
-            <option value={IntervieweeStatus.ACCEPTED}>Accepted</option>
             <option value={IntervieweeStatus.REJECTED}>Rejected</option>
-            <option value={IntervieweeStatus.ON_HOLD}>On Hold</option>
+            <option value={IntervieweeStatus.COMPLETED}>Completed</option>
           </select>
         </div>
         

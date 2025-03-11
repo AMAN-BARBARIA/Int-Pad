@@ -20,6 +20,10 @@ A Calendly-like application for scheduling interviews. This application allows u
 - **Authentication**: NextAuth.js
 - **API Integrations**: Google Calendar API, Zoom API
 
+## Documentation
+
+- [Database Schema](docs/database-schema.md): Detailed multi-tenant database schema for the application
+
 ## Getting Started
 
 ### Prerequisites

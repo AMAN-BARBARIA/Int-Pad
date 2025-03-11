@@ -8,14 +8,15 @@ import AddNoteModal from './AddNoteModal';
 
 interface IntervieweeListProps {
   interviewees: IntervieweeWithDetails[];
+  tenantId?: string;
 }
 
-export default function IntervieweeList({ interviewees }: IntervieweeListProps) {
+export default function IntervieweeList({ interviewees, tenantId }: IntervieweeListProps) {
   const router = useRouter();
   const [selectedInterviewee, setSelectedInterviewee] = useState<string | null>(null);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   
-  const getStatusBadgeColor = (status: IntervieweeStatus) => {
+  const getStatusBadgeColor = (status: IntervieweeStatus | string) => {
     switch (status) {
       case IntervieweeStatus.NEW:
         return 'bg-blue-100 text-blue-800';
@@ -25,12 +26,10 @@ export default function IntervieweeList({ interviewees }: IntervieweeListProps) 
         return 'bg-purple-100 text-purple-800';
       case IntervieweeStatus.IN_PROGRESS:
         return 'bg-indigo-100 text-indigo-800';
-      case IntervieweeStatus.ACCEPTED:
+      case IntervieweeStatus.COMPLETED:
         return 'bg-green-100 text-green-800';
       case IntervieweeStatus.REJECTED:
         return 'bg-red-100 text-red-800';
-      case IntervieweeStatus.ON_HOLD:
-        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -147,9 +146,8 @@ export default function IntervieweeList({ interviewees }: IntervieweeListProps) 
                     <option value={IntervieweeStatus.CONTACTED}>Contacted</option>
                     <option value={IntervieweeStatus.SCHEDULED}>Scheduled</option>
                     <option value={IntervieweeStatus.IN_PROGRESS}>In Progress</option>
-                    <option value={IntervieweeStatus.ACCEPTED}>Accepted</option>
                     <option value={IntervieweeStatus.REJECTED}>Rejected</option>
-                    <option value={IntervieweeStatus.ON_HOLD}>On Hold</option>
+                    <option value={IntervieweeStatus.COMPLETED}>Completed</option>
                   </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -180,6 +178,7 @@ export default function IntervieweeList({ interviewees }: IntervieweeListProps) 
       {isNoteModalOpen && selectedInterviewee && (
         <AddNoteModal
           intervieweeId={selectedInterviewee}
+          tenantId={tenantId || interviewees[0]?.tenantId || ''}
           onClose={closeNoteModal}
           onSuccess={() => {
             closeNoteModal();
