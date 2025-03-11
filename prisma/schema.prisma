@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User model for authentication and profile
+model User {
+  id                String              @id @default(cuid())
+  name              String?
+  email             String              @unique
+  emailVerified     DateTime?
+  image             String?
+  organizations     OrganizationUser[]
+  accounts          Account[]
+  sessions          Session[]
+  availabilities    Availability[]
+  interviewSettings InterviewSettings?
+  bookings          Booking[]           @relation("Interviewer")
+  scheduledBookings Booking[]           @relation("Interviewee")
+  exceptionDates    ExceptionDate[]
+  intervieweeNotes  IntervieweeNote[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  HR
+  INTERVIEWER
+  USER
+}
+
+// Organization model for team management
+model Organization {
+  id           String             @id @default(cuid())
+  name         String
+  description  String?
+  members      OrganizationUser[]
+  interviewees Interviewee[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+// Join table for users and organizations with roles
+model OrganizationUser {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String       // ADMIN, HR, INTERVIEWER, USER
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, organizationId])
+}
+
+// Interviewee model for candidate management
+model Interviewee {
+  id                String            @id @default(cuid())
+  name              String
+  email             String            @unique
+  phone             String?
+  resumeLink        String?
+  currentCompany    String?
+  yearsOfExperience Int?
+  skills            String?
+  currentCTC        String?
+  expectedCTC       String?
+  noticePeriod      String?
+  currentLocation   String?
+  status            String            @default("NEW") // NEW, CONTACTED, SCHEDULED, IN_PROGRESS, REJECTED, ACCEPTED, ON_HOLD
+  currentRound      Int               @default(0)
+  roleId            String?
+  role              JobRole?          @relation(fields: [roleId], references: [id])
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  notes             IntervieweeNote[]
+  bookings          Booking[]         @relation("CandidateBooking")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+enum IntervieweeStatus {
+  NEW
+  CONTACTED
+  SCHEDULED
+  IN_PROGRESS
+  REJECTED
+  ACCEPTED
+  ON_HOLD
+}
+
+// Job Role model
+model JobRole {
+  id           String        @id @default(cuid())
+  title        String
+  description  String?
+  interviewees Interviewee[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// Notes for interviewees
+model IntervieweeNote {
+  id            String      @id @default(cuid())
+  content       String
+  intervieweeId String
+  interviewee   Interviewee @relation(fields: [intervieweeId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+// NextAuth models
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  refresh_token_expires_in Int?    // Added field for Google OAuth
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Interview scheduling models
+model InterviewSettings {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maxSchedulesPerDay  Int      @default(3)
+  advanceBookingDays  Int      @default(30)
+  meetingDuration     Int      @default(30) // in minutes
+  bufferBetweenEvents Int      @default(15) // in minutes
+  zoomConnected       Boolean  @default(false)
+  zoomData            String?
+  googleConnected     Boolean  @default(false)
+  googleData          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek Int      // 0-6 (Sunday-Saturday)
+  startTime String   // Format: "HH:MM" in 24-hour format
+  endTime   String   // Format: "HH:MM" in 24-hour format
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, dayOfWeek])
+}
+
+model ExceptionDate {
+  id        String   @id @default(cuid())
+  date      DateTime
+  isBlocked Boolean  @default(true)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+model Booking {
+  id               String      @id @default(cuid())
+  title            String
+  startTime        DateTime
+  endTime          DateTime
+  interviewerId    String
+  interviewer      User        @relation("Interviewer", fields: [interviewerId], references: [id])
+  intervieweeId    String?
+  interviewee      User?       @relation("Interviewee", fields: [intervieweeId], references: [id])
+  intervieweeEmail String
+  intervieweeName  String
+  status           String      @default("pending") // pending, confirmed, cancelled
+  zoomMeetingId    String?
+  zoomJoinUrl      String?
+  googleEventId    String?
+  candidateId      String?
+  candidate        Interviewee? @relation("CandidateBooking", fields: [candidateId], references: [id])
+  feedback         String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
